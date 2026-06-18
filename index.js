@@ -7,6 +7,7 @@ const userRoutes = require('./Routes/user.routes');
 const adminRoutes = require('./Routes/admin.routes');
 const lecturersRoutes = require('./Routes/lecturer.routes');
 const studentsRoutes = require('./Routes/student.routes');
+const courseRoutes = require('./Routes/course.routes');
 
 
 
@@ -33,7 +34,7 @@ app.use('/admin', adminRoutes);
 app.use('/attendance', userRoutes);
 app.use("/lecturers", lecturersRoutes)
 app.use("/students", studentsRoutes)
-
+app.use("/session", courseRoutes)
 
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Welcome to Attendance Backend'});
