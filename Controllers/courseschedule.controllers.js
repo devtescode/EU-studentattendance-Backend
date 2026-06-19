@@ -230,7 +230,7 @@ module.exports.getCourseStudents = async (req, res) => {
       students,
     });
   } catch (err) {
-    console.error("❌ ERROR in getCourseStudents:", err);
+    console.error("❌ERROR in getCourseStudents:", err);
     return res.status(500).json({ message: "Server error" });
   }
 };
