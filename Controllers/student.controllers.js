@@ -2,6 +2,7 @@ const Student = require("../Models/student.models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const CourseSchedule = require("../Models/courseschedule.models")
+const mongoose = require("mongoose");
 
 
 
@@ -203,17 +204,98 @@ module.exports.getallcoursebystudent = async (req, res)=>{
 }
 
 
+
 module.exports.registerCourse = async (req, res) => {
   try {
     const studentId = req.user.id;
     const { courseId } = req.body;
 
     if (!courseId) {
-      return res.status(400).json({
-        message: "Course ID is required",
+      return res.status(400).json({ message: "courseId is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({ message: "Invalid courseId" });
+    }
+
+    const course = await CourseSchedule.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // 🔥 FIX: proper ObjectId comparison (IMPORTANT)
+    const alreadyRegistered = course.registeredStudentIds.some(
+      (id) => id.toString() === studentId
+    );
+
+    if (alreadyRegistered) {
+      return res.status(400).json({ message: "Already registered" });
+    }
+
+    // ✅ SAFE UPDATE (recommended instead of push + save)
+    await CourseSchedule.findByIdAndUpdate(courseId, {
+      $addToSet: { registeredStudentIds: studentId },
+    });
+
+    return res.json({
+      message: "Course registered successfully",
+    });
+
+  } catch (err) {
+    console.error("❌ registerCourse error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+module.exports.getMyCourses = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    // 🔥 GET COURSES WHERE STUDENT IS REGISTERED
+    const courses = await CourseSchedule.find({
+      registeredStudentIds: studentId,
+    })
+      .populate("lecturerId", "name email")
+      .select(
+        "courseCode courseTitle days startTime endTime lecturerId registeredStudentIds"
+      );
+
+    if (!courses || courses.length === 0) {
+      return res.status(200).json({
+        courses: [],
+        message: "No registered courses found",
       });
     }
 
+    return res.status(200).json({
+      courses,
+    });
+
+  } catch (error) {
+    console.error("❌ getMyCourses error:", error);
+
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+
+
+module.exports.unregisterCourse = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const { courseId } = req.params;
+
+    if (!courseId) {
+      return res.status(400).json({
+        message: "courseId is required",
+      });
+    }
+
+    // 🔥 FIND COURSE
     const course = await CourseSchedule.findById(courseId);
 
     if (!course) {
@@ -222,98 +304,27 @@ module.exports.registerCourse = async (req, res) => {
       });
     }
 
-    const student = await Student.findById(studentId);
-
-    if (!student) {
-      return res.status(404).json({
-        message: "Student not found",
-      });
-    }
-
-    const alreadyRegistered = student.registeredCourses?.some(
-      (id) => id.toString() === courseId
+    // 🔥 REMOVE STUDENT FROM COURSE (LECTURER SIDE FIX)
+    course.registeredStudentIds = course.registeredStudentIds.filter(
+      (id) => id.toString() !== studentId
     );
 
-    if (alreadyRegistered) {
-      return res.status(400).json({
-        message: "You have already registered this course",
-      });
-    }
+    await course.save();
 
-    student.registeredCourses.push(courseId);
-
-    await student.save();
-
-    res.status(200).json({
-      message: "Course registered successfully",
+    // 🔥 OPTIONAL: REMOVE FROM STUDENT MODEL (if you still use it)
+    await Student.findByIdAndUpdate(studentId, {
+      $pull: { registeredCourses: courseId },
     });
-  } catch (error) {
-    console.log(error);
 
-    res.status(500).json({
-      message: "Server error",
-    });
-  }
-};
-
-module.exports.getMyCourses = async(req, res) =>{
-    try {
-    const studentId = req.user.id;
-
-    const student = await Student.findById(studentId)
-      .populate({
-        path: "registeredCourses",
-        populate: {
-          path: "lecturerId",
-          select: "name",
-        },
-      });
-
-    if (!student) {
-      return res.status(404).json({
-        message: "Student not found",
-      });
-    }
-
-    res.status(200).json({
-      courses: student.registeredCourses,
-    });
-  } catch (error) {
-    console.log(error);
-
-    res.status(500).json({
-      message: "Server error",
-    });
-  }
-}
-
-module.exports.unregisterCourse = async (req, res) => {
-  try {
-    const studentId = req.user.id;
-    const { courseId } = req.params;
-
-    const student = await Student.findById(studentId);
-
-    if (!student) {
-      return res.status(404).json({
-        message: "Student not found",
-      });
-    }
-
-    student.registeredCourses =
-      student.registeredCourses.filter(
-        (id) => id.toString() !== courseId
-      );
-
-    await student.save();
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: "Course removed successfully",
+      message: "Course unregistered successfully",
     });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
+    console.error("❌ unregisterCourse error:", error);
+
+    return res.status(500).json({
       message: "Server error",
     });
   }

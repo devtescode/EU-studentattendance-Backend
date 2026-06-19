@@ -43,6 +43,13 @@ const courseScheduleSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+     registeredStudentIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Student",
+        default: [],
+      },
+    ],
   },
   { timestamps: true }
 );

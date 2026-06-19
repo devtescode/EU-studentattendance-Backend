@@ -7,6 +7,7 @@ const {
   getActiveSessions,
   updateSession,
   deleteSession,
+  getCourseStudents,
 } = require("../Controllers/courseschedule.controllers");
 
 const authMiddleware = require("../middleware/auth"); // adjust path if different
@@ -26,5 +27,7 @@ router.put("/update/:id", authMiddleware, updateSession);
 
 // ---------------- DELETE SESSION ----------------
 router.delete("/delete/:id", authMiddleware, deleteSession);
+
+router.get("/course/:courseId", authMiddleware, getCourseStudents);
 
 module.exports = router;

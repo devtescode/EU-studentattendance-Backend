@@ -6,4 +6,5 @@ router.post("/createLecturer", createLecturer);
 router.get("/getLecturers", getLecturers);
 router.post("/login", loginLecturer)
 
+
 module.exports = router
