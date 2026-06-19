@@ -10,6 +10,12 @@ const studentSchema = new mongoose.Schema(
     gender: String,
     department: String,
     password: String,
+    registeredCourses: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CourseSchedule",
+    },
+  ],
   },
   { timestamps: true }
 );
