@@ -19,6 +19,11 @@ const attendanceSchema = new mongoose.Schema(
       ref: "Lecturer",
       required: true,
     },
+
+    // sessionId: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "Session"
+    // }
   },
   {
     timestamps: true,
