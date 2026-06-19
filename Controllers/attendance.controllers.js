@@ -226,3 +226,41 @@ module.exports.markAttendance = async (
     });
   }
 };
+
+
+module.exports.getAttendanceHistory = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+
+    const attendance = await Attendance.find({ studentId })
+      .populate("courseId", "courseCode courseTitle")
+      .populate("sessionId", "date startTime endTime")
+      .sort({ createdAt: -1 });
+
+    const formatted = attendance.map((a) => ({
+      _id: a._id,
+      course: {
+        id: a.courseId?._id,
+        code: a.courseId?.courseCode,
+        title: a.courseId?.courseTitle,
+      },
+      session: {
+        id: a.sessionId?._id,
+        date: a.sessionId?.date,
+        startTime: a.sessionId?.startTime,
+        endTime: a.sessionId?.endTime,
+      },
+      status: a.status || "present",
+
+      // 🔥 TIME STUDENT MARKED ATTENDANCE
+      markedAt: a.createdAt,
+    }));
+
+    return res.status(200).json({
+      attendance: formatted,
+    });
+  } catch (error) {
+    console.log("❌ getAttendanceHistory error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};

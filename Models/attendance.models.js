@@ -20,10 +20,10 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
-    // sessionId: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "Session"
-    // }
+    sessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CourseSchedule"
+    }
   },
   {
     timestamps: true,
