@@ -4,6 +4,7 @@ const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 const Attendance  = require("../Models/attendance.models");
 const CourseSchedule = require("../Models/courseschedule.models");
+const AttendanceSession = require("../Models/attendanceSession.models")
 env.config()
 
 
@@ -12,19 +13,12 @@ module.exports.getMyAttendance = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    const attendance = await Attendance.find({
-      studentId,
-    })
+    const attendance = await Attendance.find({ studentId })
       .populate("courseId", "courseCode courseTitle")
       .sort({ createdAt: -1 });
 
-    // 🔥 FORMAT RESPONSE FOR FRONTEND
     const formatted = attendance.map((att) => ({
-      _id: att._id,
-      studentId: att.studentId,
-
-      // IMPORTANT: this is what frontend uses
-      sessionId: att.sessionId || att.courseId?._id,
+      id: att._id,
 
       course: {
         id: att.courseId?._id,
@@ -32,179 +26,133 @@ module.exports.getMyAttendance = async (req, res) => {
         title: att.courseId?.courseTitle,
       },
 
-      createdAt: att.createdAt,
+      weekKey: att.weekKey,
+
+      markedAt: att.createdAt,
     }));
 
-    return res.status(200).json({
-      attendance: formatted,
-    });
+    return res.status(200).json({ attendance: formatted });
   } catch (error) {
-    console.log("❌ getMyAttendance error:", error);
-
-    return res.status(500).json({
-      message: "Server error",
-    });
+    console.log(error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
-
-module.exports.getStudentAttendanceSessions = async (
-  req,
-  res
-) => {
+module.exports.getStudentAttendanceSessions = async (req, res) => {
   try {
     const studentId = req.user.id;
 
     const now = new Date();
 
-    const today = now.toLocaleDateString("en-US", {
-      weekday: "long",
-    });
+    const today = now
+      .toLocaleDateString("en-US", { weekday: "long" })
+      .toLowerCase();
 
-    const currentMinutes =
-      now.getHours() * 60 + now.getMinutes();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const courses = await CourseSchedule.find({
       registeredStudentIds: studentId,
-    }).populate("lecturerId", "name");
-
-    const activeSessions = courses.filter((course) => {
-      if (
-        !course.days ||
-        !course.days.includes(today)
-      ) {
-        return false;
-      }
-
-      const [startHour, startMinute] =
-        course.startTime.split(":").map(Number);
-
-      const [endHour, endMinute] =
-        course.endTime.split(":").map(Number);
-
-      const startMinutes =
-        startHour * 60 + startMinute;
-
-      const endMinutes =
-        endHour * 60 + endMinute;
-
-      return (
-        currentMinutes >= startMinutes &&
-        currentMinutes <= endMinutes
-      );
     });
 
-    return res.status(200).json({
-      sessions: activeSessions,
-    });
+    const sessions = courses
+      .filter((course) =>
+        course.days?.map((d) => d.toLowerCase()).includes(today)
+      )
+      .map((course) => {
+        const [sh, sm] = course.startTime.split(":").map(Number);
+        const [eh, em] = course.endTime.split(":").map(Number);
+
+        const start = sh * 60 + sm;
+        const end = eh * 60 + em;
+
+        return {
+          _id: course._id,
+          courseCode: course.courseCode,
+          courseTitle: course.courseTitle,
+          days: course.days,
+          startTime: course.startTime,
+          endTime: course.endTime,
+
+          // IMPORTANT: frontend uses this
+          isOpen: currentMinutes >= start && currentMinutes <= end,
+
+          // NEW: hide expired sessions
+          isExpired: currentMinutes > end,
+        };
+      })
+      .filter((s) => !s.isExpired); // 🔥 REMOVE OLD SESSIONS
+
+    return res.status(200).json({ sessions });
   } catch (error) {
     console.log(error);
-
-    return res.status(500).json({
-      message: "Server error",
-    });
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
+const getWeekKey = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const days = Math.floor((now - start) / (24 * 60 * 60 * 1000));
+  const week = Math.ceil((days + start.getDay() + 1) / 7);
 
+  return `${now.getFullYear()}-W${week}`;
+};
 
-
-module.exports.markAttendance = async (
-  req,
-  res
-) => {
+module.exports.markAttendance = async (req, res) => {
   try {
     const studentId = req.user.id;
     const { courseId } = req.body;
 
-    const course =
-      await CourseSchedule.findById(courseId);
-
-    if (!course) {
-      return res.status(404).json({
-        message: "Course not found",
-      });
+    if (!courseId) {
+      return res.status(400).json({ message: "courseId is required" });
     }
 
-    const registered =
-      course.registeredStudentIds.some(
-        (id) => id.toString() === studentId
-      );
+    const course = await CourseSchedule.findById(courseId);
 
-    if (!registered) {
-      return res.status(403).json({
-        message:
-          "You are not registered for this course",
-      });
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
     }
 
     const now = new Date();
 
-    const today = now.toLocaleDateString("en-US", {
-      weekday: "long",
+    const today = now
+      .toLocaleDateString("en-US", { weekday: "long" })
+      .toLowerCase();
+
+    const courseDays = course.days.map((d) => d.toLowerCase());
+
+    if (!courseDays.includes(today)) {
+      return res.status(400).json({
+        message: "Not an active day for this course",
+      });
+    }
+
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const [sh, sm] = course.startTime.split(":").map(Number);
+    const [eh, em] = course.endTime.split(":").map(Number);
+
+    const start = sh * 60 + sm;
+    const end = eh * 60 + em;
+
+    if (currentMinutes < start || currentMinutes > end) {
+      return res.status(400).json({
+        message: "Attendance session closed",
+      });
+    }
+
+    // 🔥 WEEKLY LOCK SYSTEM
+    const weekKey = getWeekKey();
+
+    const alreadyMarked = await Attendance.findOne({
+      studentId,
+      courseId,
+      weekKey,
     });
-
-    if (!course.days.includes(today)) {
-      return res.status(400).json({
-        message:
-          "Attendance is not available today",
-      });
-    }
-
-    const currentMinutes =
-      now.getHours() * 60 + now.getMinutes();
-
-    const [startHour, startMinute] =
-      course.startTime.split(":").map(Number);
-
-    const [endHour, endMinute] =
-      course.endTime.split(":").map(Number);
-
-    const startMinutes =
-      startHour * 60 + startMinute;
-
-    const endMinutes =
-      endHour * 60 + endMinute;
-
-    if (
-      currentMinutes < startMinutes ||
-      currentMinutes > endMinutes
-    ) {
-      return res.status(400).json({
-        message:
-          "Attendance session is closed",
-      });
-    }
-
-    const startOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-
-    const endOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      23,
-      59,
-      59
-    );
-
-    const alreadyMarked =
-      await Attendance.findOne({
-        studentId,
-        courseId,
-        createdAt: {
-          $gte: startOfDay,
-          $lte: endOfDay,
-        },
-      });
 
     if (alreadyMarked) {
       return res.status(400).json({
-        message:
-          "Attendance already marked today",
+        message: "You already marked attendance for this week",
       });
     }
 
@@ -212,18 +160,15 @@ module.exports.markAttendance = async (
       studentId,
       courseId,
       lecturerId: course.lecturerId,
+      weekKey,
     });
 
     return res.status(201).json({
-      message:
-        "Attendance marked successfully",
+      message: "Attendance marked successfully",
     });
-  } catch (error) {
-    console.log(error);
-
-    return res.status(500).json({
-      message: "Server error",
-    });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -234,33 +179,27 @@ module.exports.getAttendanceHistory = async (req, res) => {
 
     const attendance = await Attendance.find({ studentId })
       .populate("courseId", "courseCode courseTitle")
-      .populate("sessionId", "date startTime endTime")
       .sort({ createdAt: -1 });
 
     const formatted = attendance.map((a) => ({
       _id: a._id,
-      course: {
-        id: a.courseId?._id,
-        code: a.courseId?.courseCode,
-        title: a.courseId?.courseTitle,
-      },
-      session: {
-        id: a.sessionId?._id,
-        date: a.sessionId?.date,
-        startTime: a.sessionId?.startTime,
-        endTime: a.sessionId?.endTime,
-      },
-      status: a.status || "present",
 
-      // 🔥 TIME STUDENT MARKED ATTENDANCE
+      course: a.courseId
+        ? {
+            id: a.courseId._id,
+            code: a.courseId.courseCode,
+            title: a.courseId.courseTitle,
+          }
+        : null,
+
+      weekKey: a.weekKey,
+
       markedAt: a.createdAt,
     }));
 
-    return res.status(200).json({
-      attendance: formatted,
-    });
+    return res.status(200).json({ attendance: formatted });
   } catch (error) {
-    console.log("❌ getAttendanceHistory error:", error);
+    console.log(error);
     return res.status(500).json({ message: "Server error" });
   }
 };

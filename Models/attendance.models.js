@@ -20,9 +20,15 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
-    sessionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "CourseSchedule"
+    // sessionId: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "AttendanceSession",
+    //   required: true,
+    // },
+
+    weekKey: {
+      type: String,
+      required: true,
     }
   },
   {

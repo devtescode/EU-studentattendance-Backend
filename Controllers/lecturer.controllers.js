@@ -1,6 +1,7 @@
 const Lecturer = require("../Models/lecturer.models");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const Attendance  = require("../Models/attendance.models");
 
 module.exports.createLecturer = async (req, res) => {
   try {
@@ -90,6 +91,28 @@ module.exports.loginLecturer = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
+
+module.exports.getLecturerRecords = async (req, res) => {
+  try {
+    const lecturerId = req.user.id;
+
+    const records = await Attendance.find({
+      lecturerId,
+    })
+      .populate("studentId", "name matricNo")
+      .populate("courseId", "courseCode courseTitle")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      records,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
       message: "Server error",
     });
   }
