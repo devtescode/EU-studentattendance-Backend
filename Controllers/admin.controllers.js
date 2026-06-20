@@ -4,6 +4,9 @@ const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 const Admin = require("../Models/admin.models");
 const Student = require("../Models/student.models");
+const Course = require("../Models/courseschedule.models");
+const Lecturer = require("../Models/lecturer.models");
+const Session = require("../Models/attendance.models");
 env.config()
 
 
@@ -112,5 +115,26 @@ module.exports.getAllStudents = async (req, res) => {
     return res.status(500).json({
       message: "Server error",
     });
+  }
+};
+
+
+// GET ADMIN DASHBOARD DATA
+module.exports.getAdminDashboard = async (req, res) => {
+  try {
+    const courses = await Course.find().lean();
+    const lecturers = await Lecturer.find().lean();
+    const students = await Student.find().lean();
+    const sessions = await Session.find().lean();
+
+    return res.status(200).json({
+      courses,
+      lecturers,
+      students,
+      sessions,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
