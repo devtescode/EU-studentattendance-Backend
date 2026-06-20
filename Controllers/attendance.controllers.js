@@ -54,7 +54,6 @@ module.exports.getStudentAttendanceSessions = async (req, res) => {
       registeredStudentIds: studentId,
     });
 
-    // Get already marked sessions for today
     const weekKey = getWeekKey();
     const markedAttendance = await Attendance.find({
       studentId,
