@@ -3,6 +3,7 @@ const env = require("dotenv")
 const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
 const Admin = require("../Models/admin.models");
+const Student = require("../Models/student.models");
 env.config()
 
 
@@ -98,3 +99,18 @@ module.exports.login = async (req, res)=> {
     });
   }
 }
+
+module.exports.getAllStudents = async (req, res) => {
+  try {
+    const students = await Student.find().sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      students,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      message: "Server error",
+    });
+  }
+};
