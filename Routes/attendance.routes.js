@@ -9,4 +9,5 @@ router.get("/student-attendance", verifyStudent, getStudentAttendanceSessions)
 router.post("/mark", verifyStudent, markAttendance)
 router.get("/attendance-history", verifyStudent, getAttendanceHistory)
 
+
 module.exports = router

@@ -196,4 +196,47 @@ module.exports.getLecturerDashboard = async (req, res) => {
       message: "Server error",
     });
   }
-};``
+};
+
+
+// In your lecturer controller
+module.exports.getStudentAttendanceHistory = async (req, res) => {
+  try {
+    const { studentId, courseId } = req.query;
+    const lecturerId = req.user.id;
+
+    if (!studentId || !courseId) {
+      return res.status(400).json({ 
+        message: "studentId and courseId are required" 
+      });
+    }
+
+    // Verify the course belongs to this lecturer
+    const course = await CourseSchedule.findOne({
+      _id: courseId,
+      lecturerId: lecturerId,
+    });
+
+    if (!course) {
+      return res.status(403).json({ 
+        message: "You don't have access to this course" 
+      });
+    }
+
+    // Fetch all attendance records for this student and course
+    const attendance = await Attendance.find({
+      studentId: studentId,
+      courseId: courseId,
+    })
+    .sort({ createdAt: -1 });
+
+    return res.status(200).json({ 
+      attendance: attendance,
+      count: attendance.length 
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};

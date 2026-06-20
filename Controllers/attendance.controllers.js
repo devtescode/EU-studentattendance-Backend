@@ -2,7 +2,7 @@ const jwt = require("jsonwebtoken")
 const env = require("dotenv")
 const mongoose = require("mongoose")
 const bcrypt = require("bcryptjs")
-const Attendance  = require("../Models/attendance.models");
+const Attendance = require("../Models/attendance.models");
 const CourseSchedule = require("../Models/courseschedule.models");
 const AttendanceSession = require("../Models/attendanceSession.models")
 env.config()
@@ -54,6 +54,15 @@ module.exports.getStudentAttendanceSessions = async (req, res) => {
       registeredStudentIds: studentId,
     });
 
+    // Get already marked sessions for today
+    const weekKey = getWeekKey();
+    const markedAttendance = await Attendance.find({
+      studentId,
+      weekKey,
+    }).select('courseId');
+
+    const markedCourseIds = markedAttendance.map(a => a.courseId.toString());
+
     const sessions = courses
       .filter((course) =>
         course.days?.map((d) => d.toLowerCase()).includes(today)
@@ -72,15 +81,12 @@ module.exports.getStudentAttendanceSessions = async (req, res) => {
           days: course.days,
           startTime: course.startTime,
           endTime: course.endTime,
-
-          // IMPORTANT: frontend uses this
           isOpen: currentMinutes >= start && currentMinutes <= end,
-
-          // NEW: hide expired sessions
           isExpired: currentMinutes > end,
+          isAlreadyMarked: markedCourseIds.includes(course._id.toString()), // Add this
         };
       })
-      .filter((s) => !s.isExpired); // 🔥 REMOVE OLD SESSIONS
+      .filter((s) => !s.isExpired);
 
     return res.status(200).json({ sessions });
   } catch (error) {
@@ -88,14 +94,17 @@ module.exports.getStudentAttendanceSessions = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
-
+// Replace this function
 const getWeekKey = () => {
   const now = new Date();
   const start = new Date(now.getFullYear(), 0, 1);
   const days = Math.floor((now - start) / (24 * 60 * 60 * 1000));
   const week = Math.ceil((days + start.getDay() + 1) / 7);
 
-  return `${now.getFullYear()}-W${week}`;
+  // Get the current day name
+  const day = now.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+
+  return `${now.getFullYear()}-W${week}-${day}`;
 };
 
 module.exports.markAttendance = async (req, res) => {
@@ -141,7 +150,7 @@ module.exports.markAttendance = async (req, res) => {
       });
     }
 
-    // 🔥 WEEKLY LOCK SYSTEM
+    // 🔥 WEEKLY LOCK SYSTEM - NOW INCLUDES DAY
     const weekKey = getWeekKey();
 
     const alreadyMarked = await Attendance.findOne({
@@ -152,7 +161,7 @@ module.exports.markAttendance = async (req, res) => {
 
     if (alreadyMarked) {
       return res.status(400).json({
-        message: "You already marked attendance for this week",
+        message: "You already marked attendance for this week's session",
       });
     }
 
@@ -172,7 +181,6 @@ module.exports.markAttendance = async (req, res) => {
   }
 };
 
-
 module.exports.getAttendanceHistory = async (req, res) => {
   try {
     const studentId = req.user.id;
@@ -186,10 +194,10 @@ module.exports.getAttendanceHistory = async (req, res) => {
 
       course: a.courseId
         ? {
-            id: a.courseId._id,
-            code: a.courseId.courseCode,
-            title: a.courseId.courseTitle,
-          }
+          id: a.courseId._id,
+          code: a.courseId.courseCode,
+          title: a.courseId.courseTitle,
+        }
         : null,
 
       weekKey: a.weekKey,
