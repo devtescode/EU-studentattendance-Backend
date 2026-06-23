@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs")
 const Attendance = require("../Models/attendance.models");
 const CourseSchedule = require("../Models/courseschedule.models");
 const AttendanceSession = require("../Models/attendanceSession.models")
+const moment = require("moment-timezone");
 env.config()
 
 
@@ -38,37 +39,106 @@ module.exports.getMyAttendance = async (req, res) => {
   }
 };
 
+// module.exports.getStudentAttendanceSessions = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
+
+//     const now = new Date();
+
+//     const today = now
+//       .toLocaleDateString("en-US", { weekday: "long" })
+//       .toLowerCase();
+
+//     const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+//     const courses = await CourseSchedule.find({
+//       registeredStudentIds: studentId,
+//     });
+
+//     const weekKey = getWeekKey();
+//     const markedAttendance = await Attendance.find({
+//       studentId,
+//       weekKey,
+//     }).select('courseId');
+
+//     const markedCourseIds = markedAttendance.map(a => a.courseId.toString());
+
+//     const sessions = courses
+//       .filter((course) =>
+//         course.days?.map((d) => d.toLowerCase()).includes(today)
+//       )
+//       .map((course) => {
+//         const [sh, sm] = course.startTime.split(":").map(Number);
+//         const [eh, em] = course.endTime.split(":").map(Number);
+
+//         const start = sh * 60 + sm;
+//         const end = eh * 60 + em;
+
+//         return {
+//           _id: course._id,
+//           courseCode: course.courseCode,
+//           courseTitle: course.courseTitle,
+//           days: course.days,
+//           startTime: course.startTime,
+//           endTime: course.endTime,
+//           isOpen: currentMinutes >= start && currentMinutes <= end,
+//           isExpired: currentMinutes > end,
+//           isAlreadyMarked: markedCourseIds.includes(course._id.toString()), // Add this
+//         };
+//       })
+//       .filter((s) => !s.isExpired);
+
+//     return res.status(200).json({ sessions });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+
+
 module.exports.getStudentAttendanceSessions = async (req, res) => {
   try {
     const studentId = req.user.id;
 
-    const now = new Date();
+    // Nigeria timezone
+    const lagosTime = moment().tz("Africa/Lagos");
 
-    const today = now
-      .toLocaleDateString("en-US", { weekday: "long" })
-      .toLowerCase();
+    const today = lagosTime.format("dddd").toLowerCase();
 
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const currentMinutes =
+      lagosTime.hour() * 60 +
+      lagosTime.minute();
 
     const courses = await CourseSchedule.find({
       registeredStudentIds: studentId,
     });
 
     const weekKey = getWeekKey();
+
     const markedAttendance = await Attendance.find({
       studentId,
       weekKey,
-    }).select('courseId');
+    }).select("courseId");
 
-    const markedCourseIds = markedAttendance.map(a => a.courseId.toString());
+    const markedCourseIds = markedAttendance.map(
+      (a) => a.courseId.toString()
+    );
 
     const sessions = courses
       .filter((course) =>
-        course.days?.map((d) => d.toLowerCase()).includes(today)
+        course.days?.some(
+          (day) => day.toLowerCase() === today
+        )
       )
       .map((course) => {
-        const [sh, sm] = course.startTime.split(":").map(Number);
-        const [eh, em] = course.endTime.split(":").map(Number);
+        const [sh, sm] = course.startTime
+          .split(":")
+          .map(Number);
+
+        const [eh, em] = course.endTime
+          .split(":")
+          .map(Number);
 
         const start = sh * 60 + sm;
         const end = eh * 60 + em;
@@ -80,17 +150,35 @@ module.exports.getStudentAttendanceSessions = async (req, res) => {
           days: course.days,
           startTime: course.startTime,
           endTime: course.endTime,
-          isOpen: currentMinutes >= start && currentMinutes <= end,
-          isExpired: currentMinutes > end,
-          isAlreadyMarked: markedCourseIds.includes(course._id.toString()), // Add this
+
+          isOpen:
+            currentMinutes >= start &&
+            currentMinutes <= end,
+
+          isExpired:
+            currentMinutes > end,
+
+          isAlreadyMarked:
+            markedCourseIds.includes(
+              course._id.toString()
+            ),
         };
       })
-      .filter((s) => !s.isExpired);
+      .filter((session) => !session.isExpired);
 
-    return res.status(200).json({ sessions });
+    return res.status(200).json({
+      currentTime: lagosTime.format(
+        "YYYY-MM-DD HH:mm:ss"
+      ),
+      timezone: "Africa/Lagos",
+      today,
+      sessions,
+    });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 // Replace this function
