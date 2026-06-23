@@ -194,28 +194,109 @@ const getWeekKey = () => {
   return `${now.getFullYear()}-W${week}-${day}`;
 };
 
+// module.exports.markAttendance = async (req, res) => {
+//   try {
+//     const studentId = req.user.id;
+//     const { courseId } = req.body;
+
+//     if (!courseId) {
+//       return res.status(400).json({ message: "courseId is required" });
+//     }
+
+//     const course = await CourseSchedule.findById(courseId);
+
+//     if (!course) {
+//       return res.status(404).json({ message: "Course not found" });
+//     }
+
+//     const now = new Date();
+
+//     const today = now
+//       .toLocaleDateString("en-US", { weekday: "long" })
+//       .toLowerCase();
+
+//     const courseDays = course.days.map((d) => d.toLowerCase());
+
+//     if (!courseDays.includes(today)) {
+//       return res.status(400).json({
+//         message: "Not an active day for this course",
+//       });
+//     }
+
+//     const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+//     const [sh, sm] = course.startTime.split(":").map(Number);
+//     const [eh, em] = course.endTime.split(":").map(Number);
+
+//     const start = sh * 60 + sm;
+//     const end = eh * 60 + em;
+
+//     if (currentMinutes < start || currentMinutes > end) {
+//       return res.status(400).json({
+//         message: "Attendance session closed",
+//       });
+//     }
+
+//     // 🔥 WEEKLY LOCK SYSTEM - NOW INCLUDES DAY
+//     const weekKey = getWeekKey();
+
+//     const alreadyMarked = await Attendance.findOne({
+//       studentId,
+//       courseId,
+//       weekKey,
+//     });
+
+//     if (alreadyMarked) {
+//       return res.status(400).json({
+//         message: "You already marked attendance for this week's session",
+//       });
+//     }
+
+//     await Attendance.create({
+//       studentId,
+//       courseId,
+//       lecturerId: course.lecturerId,
+//       weekKey,
+//     });
+
+//     return res.status(201).json({
+//       message: "Attendance marked successfully",
+//     });
+//   } catch (err) {
+//     console.log(err);
+//     return res.status(500).json({ message: "Server error" });
+//   }
+// };
+
 module.exports.markAttendance = async (req, res) => {
   try {
     const studentId = req.user.id;
     const { courseId } = req.body;
 
     if (!courseId) {
-      return res.status(400).json({ message: "courseId is required" });
+      return res.status(400).json({
+        message: "courseId is required",
+      });
     }
 
     const course = await CourseSchedule.findById(courseId);
 
     if (!course) {
-      return res.status(404).json({ message: "Course not found" });
+      return res.status(404).json({
+        message: "Course not found",
+      });
     }
 
-    const now = new Date();
+    // Nigeria timezone
+    const lagosTime = moment().tz("Africa/Lagos");
 
-    const today = now
-      .toLocaleDateString("en-US", { weekday: "long" })
+    const today = lagosTime
+      .format("dddd")
       .toLowerCase();
 
-    const courseDays = course.days.map((d) => d.toLowerCase());
+    const courseDays = course.days.map((d) =>
+      d.toLowerCase()
+    );
 
     if (!courseDays.includes(today)) {
       return res.status(400).json({
@@ -223,32 +304,43 @@ module.exports.markAttendance = async (req, res) => {
       });
     }
 
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const currentMinutes =
+      lagosTime.hour() * 60 +
+      lagosTime.minute();
 
-    const [sh, sm] = course.startTime.split(":").map(Number);
-    const [eh, em] = course.endTime.split(":").map(Number);
+    const [sh, sm] = course.startTime
+      .split(":")
+      .map(Number);
+
+    const [eh, em] = course.endTime
+      .split(":")
+      .map(Number);
 
     const start = sh * 60 + sm;
     const end = eh * 60 + em;
 
-    if (currentMinutes < start || currentMinutes > end) {
+    if (
+      currentMinutes < start ||
+      currentMinutes > end
+    ) {
       return res.status(400).json({
         message: "Attendance session closed",
       });
     }
 
-    // 🔥 WEEKLY LOCK SYSTEM - NOW INCLUDES DAY
     const weekKey = getWeekKey();
 
-    const alreadyMarked = await Attendance.findOne({
-      studentId,
-      courseId,
-      weekKey,
-    });
+    const alreadyMarked =
+      await Attendance.findOne({
+        studentId,
+        courseId,
+        weekKey,
+      });
 
     if (alreadyMarked) {
       return res.status(400).json({
-        message: "You already marked attendance for this week's session",
+        message:
+          "You already marked attendance for this week's session",
       });
     }
 
@@ -261,10 +353,16 @@ module.exports.markAttendance = async (req, res) => {
 
     return res.status(201).json({
       message: "Attendance marked successfully",
+      time: lagosTime.format(
+        "YYYY-MM-DD HH:mm:ss"
+      ),
+      timezone: "Africa/Lagos",
     });
   } catch (err) {
     console.log(err);
-    return res.status(500).json({ message: "Server error" });
+    return res.status(500).json({
+      message: "Server error",
+    });
   }
 };
 
